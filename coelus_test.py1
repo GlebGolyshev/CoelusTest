@@ -1,0 +1,474 @@
+"""
+АЛГОРИТМ РАБОТЫ
+
+1 - Проверяю возможность размещения фигу по их размерам (По площади и длинне/ширане)
+
+2 - Собираю одинаковые L-образные фигуры (с одной из ножек равной двум) в прямоугольники
+
+3 - Собираю совместимые L-образные фигуры и прямоугольники в прямоугольники с размерами образующего L-элемента
+
+4 - Размещаю на поле стола прямоугольники сверху вниз, слева на право в порядке уменьшения площади, начиная с первой
+незанятой клетки в линии с учетом того, что прямоугольник влезает в размеры стола. Размещенные элементы удаляю из
+списка.
+
+5 - Размещаю L-полиомоно, начиная с первой свободной клетки, строго в незаполненных участвках. Поворачиваю полиомино
+путем изменения координат и направления длинны линий. Размещенные элементы удаляю из списка.
+
+6 - Проверяю заполненность списков элементов - если они пустые, то замощение возможно
+
+"""
+
+from operator import itemgetter
+
+import numpy as np
+
+
+class cWork:
+
+    def remove_elems(self, lstFig, lstElem):
+        """
+        Функция (процедура) удаляет фигуры, из списка L-элементов и прямоугольников, использованных в сборке
+        прямоугольников
+        :param lstFig: исходный список фигур
+        :param lstElem: список удаляемых элементов
+        :return:
+        """
+        for i in lstElem:
+            lstFig.remove(i)
+
+    def __init__(self, rects=None, lsts=None, table=None):
+        """
+
+        :param rects: list of tuples - Входной список прямоугольников
+        :param lsts: list of tuples - Входной список L-полиомино
+        :param table: tuple - Размеры стола
+        """
+        assert rects and lsts and table
+
+        self.src_rects = rects
+        self.src_lsts = lsts
+        self.src_table = table
+
+        self.nparrTable = np.zeros((max(table), min(table)))
+
+        self.lstRecLog = list()
+        self.lstLsLog = list()
+
+        self.lstTempL = list()
+        self.lstTempR = list()
+
+        self.remove_elems(rects, [i for i in rects if (i[0][0] and i[0][1]) == 1])
+        self.remove_elems(lsts, [i for i in lsts if (i[0][0] and i[0][1]) == 1])
+
+        # Переформируем списки фигур - добавляем площадь.
+        for i in rects:
+            self.lstRecLog.append([(i[0][0], i[0][1]), i[1], i[0][0] * i[0][1]])
+
+        for i in lsts:
+            self.lstLsLog.append([(i[0][0], i[0][1]), i[1], i[0][0] + i[0][1] - 1])
+
+    def Ljoin(self, i, L1, L2, Lcount):
+        """
+        Функция (процедура) собирает элемент списка прямоугольников с помощью параметров данного L-элемента
+        Добавляет прямоугольник в котором одна из сторон равна двум, а другая на один больше чем у исходного полиомино.
+        Снижает поличество исходных элементов на целую часть от деления на два. Это - количесвтво собранных фигур.
+
+        :param i: list - Элемент из списка L-элементов
+        :param L1: int - Длина ножки 1
+        :param L2: int - Длина ножки 2
+        :param Lcount: int - Количество элементов
+        :return:
+        """
+        # присваиваем результирующий прямоугольник в список прямоугольников
+        self.lstTempR.append([(L1 + 1, L2), Lcount // 2, (L1 + 1) * (L2)])
+        # Уменьшаем максимальное количество пар
+        count = i[1] - (i[1] // 2) * 2
+        # Если мощность после уменьшения становится равной 0, удаляем элемент из
+        # списка L полиомино
+        if count > 0:
+            self.lstTempL.append([(L1, L2), count, L1 + L2 - 1])
+
+    def RLjoin(self, i, j, addcount, L1, L2):
+        """
+        Функция (процедура) собирает элемент списка прямоугольников с помощью параметров данного L-элемента и количества
+        совместимых прямоугольников. Добавляет прямоугольник с длиной и шириной равной ножкам использованного L-элемента.
+        Уменщает количество обоих использованных элеметов на количество собранных элементов.
+
+        :param i: list - Элемент из списка L-элементов
+        :param j: list - Элемент из списка прямоугольников
+        :param addcount: int - меньшее из количеств собираемых фигур
+        :param L1: int - длина ножки 1 L-полиомино
+        :param L2: int - длина ножки 2 L-полиомино
+        :return:
+        """
+        self.lstTempR.append([(L1, L2), addcount, L1 * L2])
+        # Вносим новый прямоугольник в список
+        countL = i[1] - addcount
+        countR = j[1] - addcount
+
+        # Уменьшаем количество изначальных фигур, если фигуры осталсь
+        # Вносим их во временный список
+        if countL > 0:
+            self.lstTempL.append([(L1, L2), countL, L1 + L2 - 1])
+
+        if countR > 0:
+            self.lstTempR.append([(L1 - 1, L2 - 1), countR, L1 * L2])
+
+    def RecAdd(self):
+        """
+        Функция (процедура) проверяет списки фигур на наличие совместивых пар и вызывает функции сборки Ljoin и RLjoin.
+        :return:
+        """
+        for i in self.lstLsLog:
+            for j in self.lstRecLog:
+                # Проверяем, есть ли в списке L-полимино полимино с одной из сторон равной 1
+                # И соединяем их в один прямоугольный полиомино с измерениями на 1 больше
+                L1 = i[0][0]
+                L2 = i[0][1]
+                # print(L1, L2)
+                Lcount = i[1]
+                Rcount = j[1]
+                testL = (L1 - 1, L2 - 1)
+                testR = j[0]
+                testRT = j[0][::-1]
+                addcount = min(Lcount, Rcount)
+
+                if (testL == testR) or (testL == testRT):
+                    # Находим прямоугольник со сторонами меньшими длин ножек L полиомино на 1
+                    self.RLjoin(i=i, j=j, addcount=addcount, L1=L1, L2=L2)
+                else:
+                    if j not in self.lstTempR:
+                        self.lstTempR.append(j)
+
+            if (L1 or L2) == 2 and (Lcount != 1):  # находим сторону равную 1
+                # присваеваем результирующий прямоугольник в список прямоугольников
+                if L2 == 2:
+                    self.Ljoin(i=i, L1=L1, L2=2, Lcount=Lcount)
+                elif L1 == 2:
+                    self.Ljoin(i=i, L1=L2, L2=2, Lcount=Lcount)
+                elif (L1 == 2) and (L2 == 2):
+                    self.Ljoin(i=i, L1=L1, L2=2, Lcount=Lcount)
+            else:
+                self.lstTempL.append(i)
+
+        self.lstRecLog = self.lstTempR
+        self.lstLsLog = self.lstTempL
+        self.Norm()
+        self.Sequence()
+
+    def Norm(self):
+        """
+        Функция (процедура) преобразует фигуры так, чтобы их большая сторона была вертикальной,
+        а меньшая - горизонтальной. Сортирует фигуры п порядке уменьшения их площади.
+        :return:
+        """
+
+        for n, i in enumerate(self.lstRecLog):
+            self.lstRecLog[n] = [(max(i[0]), min(i[0])), i[1], i[2]]
+        for n, i in enumerate(self.lstLsLog):
+            self.lstLsLog[n] = [(max(i[0]), min(i[0])), i[1], i[2]]
+        self.lstRecLog = sorted(self.lstRecLog, key=itemgetter(2), reverse=True)
+        self.lstLsLog = sorted(self.lstLsLog, key=itemgetter(2), reverse=True)
+
+    def Fill(self, typeF, K1, K2, D1, D2):
+        """
+        Функция попеременно заполняет элементы массива стола в зависимости от типа фигуры.
+
+        :param typeF: str - Nbg abuehs
+        :param K1: int - Х координата точки привязки
+        :param K2: int - Y координата точки привязки
+        :param D1: int - Высота фигуры
+        :param D2: int - Ширина фигуры
+        :return:
+        """
+        TypeF = typeF
+        Xcoord = K1
+        Ycoord = K2
+        Hight = D1
+        Length = D2
+
+        if TypeF == 'R':
+
+            if Length > 0 and Hight > 0:
+                for i in range(Ycoord, Ycoord + Length):
+                    for j in range(Xcoord, Xcoord + Hight):
+                        self.nparrTable[j][i] = 1
+            elif Length < 0 and Hight > 0:
+                negYcoord = Ycoord + Length + 1
+                for i in range(negYcoord, negYcoord - Length):
+                    for j in range(Xcoord, Xcoord + Hight):
+                        self.nparrTable[j][i] = 1
+            elif Length > 0 and Hight < 0:
+                negXcoord = Xcoord + Length + 1
+                for i in range(Ycoord, Ycoord - Length):
+                    for j in range(negXcoord, negXcoord + Hight):
+                        self.nparrTable[j][i] = 1
+            elif Length < 0 and Hight < 0:
+                negXcoord = Xcoord + Length + 1
+                negYcoord = Ycoord + Length + 1
+                for i in range(negYcoord, negYcoord - Length):
+                    for j in range(negXcoord, negXcoord + Hight):
+                        self.nparrTable[j][i] = 1
+
+
+
+        else:
+
+            if Length > 0:
+                for i in range(Ycoord, Ycoord + Length):
+                    self.nparrTable[Xcoord][i] = 1
+            else:
+                negYcoord = Ycoord + Length + 1
+                for i in range(negYcoord, negYcoord - Length):
+                    self.nparrTable[Xcoord][i] = 1
+
+            if Hight > 0:
+                for i in range(Xcoord, Xcoord + Hight):
+                    self.nparrTable[i][Ycoord] = 1
+            else:
+                negXcoord = Xcoord + Hight + 1
+                for i in range(negXcoord, negXcoord - Hight):
+                    self.nparrTable[i][Ycoord] = 1
+
+    def CheckLine(self, Rlen, Rhight):
+        """
+        Функция проверяет, можно ли вписать прямоугольник в указанной точке привязки.
+        :param Rlen: int - ширина прямоугольника
+        :param Rhight: int - высота прямоугольника
+        :return: Y - у координата точки привязки, X - х координата точки привязки
+        """
+        Y = 0
+        X = 0
+
+        for j in range(self.nparrTable.shape[1]):
+            for i in range(self.nparrTable.shape[0]):
+                if self.nparrTable[i][j] == 1:
+                    X += 1
+                    if self.nparrTable.shape[0] - X < Rhight:
+                        X = 0
+                        break
+
+                else:
+                    if self.nparrTable.shape[0] - Y < Rlen:
+                        print("Cannot fill all figures")
+                        # TODO: должна давать False на выходе программы
+                    else:
+                        return X, Y
+
+            Y += 1
+
+        return X, Y
+
+    def Checkfilllogic(self, state, Ycoord, Xcoord, Ylen, Xlen):
+        """
+        Функция ищет раположение L-полиомино, которое можно разместить в данной точке привязки
+        :param state: str - Транспонируется полиомино или нет
+        :param Ycoord: int - у координата исследуемой точки привязки
+        :param Xcoord: int - х координата исследуемой точки привязки
+        :param Ylen: int - Высота фигуры
+        :param Xlen: int - Ширина фигуры
+        :return: возваращет измененные в зависимости от положения параметры фигуры
+        """
+        X = Xcoord
+        Y = Ycoord
+
+        if state == "Reverse":
+            Temp = Xlen
+            Xlen = Ylen
+            Ylen = Temp
+
+        for i in range(Xcoord, Xcoord + Xlen):
+            if self.nparrTable[Ycoord][i] == 0:
+                pass
+            else:
+                print("Out of Bounds")
+                # TODO: должно давать False на выход программы
+        ###
+        #
+        for j in range(Ycoord, Ycoord + Ylen):
+            if (Ycoord + Ylen > self.nparrTable.shape[0]) or (self.nparrTable[j][Xcoord] == 1):
+
+                #
+                ###
+                for j in range(Ycoord, Ycoord + Ylen):
+                    if (Ycoord + Ylen > self.nparrTable.shape[0]) or (self.nparrTable[j - Ylen][Xcoord] == 1):
+
+                        ###
+                        #
+                        for j in range(Ycoord, Ycoord + Ylen):
+                            if (Ycoord + Ylen > self.nparrTable.shape[0]) or (self.nparrTable[j][Xcoord + Xlen] == 1):
+
+                                #
+                                ###
+                                for j in range(Ycoord, Ycoord + Ylen):
+                                    if (Ycoord + Ylen < self.nparrTable.shape[0]) or (
+                                            self.nparrTable[j - Ylen][Xcoord + Xlen] == 1):
+                                        # Необходимо повернуть L-полиомино
+                                        raise ValueError
+                                X = Xcoord + Xlen - 1
+                                Y = Ycoord
+                                Xlen = -Xlen
+                                Ylen = -Ylen
+                                return Y, X, Ylen, Xlen
+
+                        X = Xcoord + Xlen - 1
+                        Y = Ycoord
+                        Xlen = -Xlen
+                        Ylen = Ylen
+                        return Y, X, Ylen, Xlen
+                X = Xcoord
+                Y = Ycoord
+                Xlen = Xlen
+                Ylen = -Ylen
+                return Y, X, Ylen, Xlen
+
+        return Y, X, Ylen, Xlen
+
+    def CheckFill(self, Ycoord, Xcoord, Ylen, Xlen):
+        """
+        Функция вызывает Checkfilllogic, и если та выдает ошибку, транспонирует L-полиомино
+        :param Ycoord: int - у координата исследуемой точки привязки
+        :param Xcoord: х координата исследуемой точки привязки
+        :param Ylen: int - Высота фигуры
+        :param Xlen: Xlen: int - Ширина фигуры
+        :return:
+        """
+        Xcoord = Xcoord
+        Ycoord = Ycoord
+        try:
+            Y, X, Ylen, Xlen = self.Checkfilllogic(state="Direct", Ycoord=Ycoord, Xcoord=Xcoord, Ylen=Ylen, Xlen=Xlen)
+        except ValueError:
+            try:
+                Y, X, Ylen, Xlen = self.Checkfilllogic(state="Reverse", Ycoord=Ycoord, Xcoord=Xcoord, Ylen=Ylen,
+                                                       Xlen=Xlen)
+            except ValueError:
+                # TODO: должно давать False на выход программы
+                return False
+
+        return Y, X, Ylen, Xlen
+
+    def CheckTranspose(self, LenY, LenX):
+        """
+        Функция проверяет, вписывается ли длинна прямоугольник в ширину стола и поворачивает его, если это так.
+        :param LenY: int - высота прямоугольника
+        :param LenX: int - ширина прямоугольника
+        :return: возвращает новые высоту и ширину прямоугольника
+        """
+        if self.nparrTable.shape[1] == max([LenY, LenX]):
+            return LenX, LenY
+        else:
+            return LenY, LenX
+
+    def Sequence(self):
+        """
+        Функция (процедура) попеременно пытается замостить каждый элемент из списка фигур. Сначала прямоугольников,
+        затем L-=полиомино. Вызывает функция проверки линии CheckLine, затем функция расположения (CheckTranspose для
+        прямоугольников и CheckFill для L-полиомино) и наконец, функцию заполнения Fill с параметрами, полученными из
+        предыдущих функций
+        :return:
+        """
+        _tmp = list()
+        for i in self.lstRecLog:
+            for c in range(i[1]):
+                X, Y = self.CheckLine(i[0][1], i[0][0])
+                Hight, Length = self.CheckTranspose(i[0][0], i[0][1])
+                self.Fill("R", X, Y, Hight, Length)
+            _tmp.append(i)
+        self.remove_elems(self.lstRecLog, _tmp)
+
+        _tmp = list()
+        for j in self.lstLsLog:
+            # self.nparrTable.shape[1] - ширина массива
+            for c in range(j[1]):
+                Y, X = self.CheckLine(1, 1)
+                Y, X, YTlen, XTlen = self.CheckFill(Y, X, j[0][0], j[0][1])
+                self.Fill("L", Y, X, YTlen, XTlen)
+            _tmp.append(j)
+
+        self.remove_elems(self.lstLsLog, _tmp)
+
+        if len(self.lstRecLog) == 1:
+            self.lstRecLog.remove(i)
+        if len(self.lstLsLog) == 1:
+            self.lstLsLog.remove(j)
+
+    @property
+    def rects(self):
+        return self.lstRecLog
+
+    @property
+    def lpols(self):
+        return self.lstLsLog
+
+    def main_check(self) -> bool:
+        """
+        Функция вызывает блок функция замощения. После запуска, проверяет, разместились ли все элементы на столе.
+        Если разместились, сообщает что замощение возможно, если нет, то сообщает что замощение невозможно.
+        :return:
+        """
+        if self.checkSquare():
+            try:
+                self.RecAdd()
+                # если все фигуры вписываются в стол оба списка должны быть пустыми
+                return (len(self.rects) == 0) and (len(self.lpols) == 0)
+            except IndexError:
+                return False
+        else:
+            # грубя проверка не прошла - площадь фигур больше площади стола, измерения фигур больше стола
+            return False
+
+    def check_lenght(self, fig):
+        """
+        Функция проверяет, влезает ли фигура в размеры стола
+        :param fig: list - прямоугольник или L-полиомино
+        :return:
+        """
+        for i in fig:
+            if max(i[0][0], i[0][1]) > max(self.src_table[0], self.src_table[1]):
+                return False
+        return True
+
+    def checkSquare(self) -> bool:
+        """
+        Функция (процедура) проверяет, может ли набор фигур поместится на столе, сравнивая площадь стола с общей
+        площадью фигур. Запускает функцию проверки дляны фигур check_lenght.
+        :return:
+        """
+        # Вычисляю площадь стола
+        sqrTable = self.src_table[0] * self.src_table[1]
+
+        # Вычисляю общую площадь прямоугольных полиомино
+        sqrR = sum([i[0][0] * i[0][1] * i[1] for i in self.src_rects])
+
+        # Вычисляю общую площадь L образных полиомино
+        sqrL = sum([(i[0][0] + i[0][1] - 1) * i[1] for i in self.src_lsts])
+
+        # Сравниваю большую из сторон L образного полиомино с большой стороной стола
+        # Если сторона полиомино больше, то замощение не возможно
+        return (sqrTable < (sqrR + sqrL)) or self.check_lenght(self.src_lsts) or self.check_lenght(self.src_rects)
+
+
+def main():
+    """
+    Основная функция. Здесь задаются списки фигур и размеры стола. Также запускаются блоки обработки и логики замощения.
+    Дается ответ на вопрос задачи.
+    :return:
+    """
+    # Ввод параметров
+    tplTable = (5, 5)  # Ввод размеров стола
+    lstRec = [((2, 2), 3)]  # Ввод измерений прямоугольных полиомино и их количества
+    lstLsp = [((3, 2), 1), ((2, 2), 1)]  # Ввод измерений L-образных полиомино и их количества
+
+    x = cWork(rects=lstRec, lsts=lstLsp, table=tplTable)
+    main_answ = x.main_check()
+
+    # Опционный вывод заполненного стола
+    print(x.nparrTable)
+
+    print('фигуры вписываются в стол - ', main_answ)
+    return main_answ
+
+if __name__ == '__main__':
+    main()
+
+    print('')
